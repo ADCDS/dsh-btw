@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.5-adcds.2] - 2026-11-06
+
+- Continue a side question in a background subagent: a button on the answer starts a real subagent that inherits the conversation plus the question and answer, with tools under the main session's permissions.
+- Fix side questions failing on DSH builds after the `0.2.2-rc.1` release: those builds read the activation task from the spec's top level, while the release reads `spec.request`. Both report the same version, so the plugin now supplies both.
+
 ## [1.3.5-adcds.1] - 2026-11-06
 
 - Fork of upstream 1.3.5. A side question can no longer call `send_message`, even when it is listed in the whitelist: the call could wake the main session with a user-role message nobody asked for. This removes the "send it back to the main conversation" feature.
