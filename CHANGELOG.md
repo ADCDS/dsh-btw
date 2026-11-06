@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.5-adcds.1] - 2026-11-06
+
+- Fork of upstream 1.3.5. A side question can no longer call `send_message`, even when it is listed in the whitelist: the call could wake the main session with a user-role message nobody asked for. This removes the "send it back to the main conversation" feature.
+
 ## [1.3.5] - 2026-11-06
 
 - Fix side questions failing to start when DSH is opened over a plain-HTTP LAN address: browsers do not expose `crypto.randomUUID` in a non-secure context, so asking a side question failed with an error. Request ids now come from a random source that works in every context, so LAN access behaves the same as local access (#25).
