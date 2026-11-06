@@ -20,6 +20,14 @@ export interface ChildRequest {
     locale: BtwLocale;
 }
 export type StartChild = (request: ChildRequest) => Promise<ChildRun>;
+/** 已完成的旁问；转为后台子代理时由宿主提供，不信任客户端传回的问答内容。 */
+export interface SettledAnswer {
+    question: string;
+    /** 不含引用原文的问题，用作子代理标签。 */
+    title: string;
+    answer: string;
+    locale: BtwLocale;
+}
 interface JobOptions {
     cleanupTimeoutMs?: number;
     onError?: (error: Error) => void;
@@ -36,11 +44,16 @@ export declare class SideJobs {
     private readonly options;
     private readonly jobs;
     private readonly retired;
+    private readonly settled;
     private disposed;
     private idleNotified;
     constructor(start: StartChild, timeoutMs?: number, options?: JobOptions);
     get size(): number;
-    ask(scope: string, id: string, question: string, signal?: AbortSignal, context?: unknown, locale?: BtwLocale): Promise<SideResult>;
+    ask(scope: string, id: string, question: string, signal?: AbortSignal, context?: unknown, locale?: BtwLocale, title?: string): Promise<SideResult>;
+    /** 取走已完成的旁问，防止重复转入；启动失败时用 rememberAnswer 放回以便重试。 */
+    takeAnswer(scope: string, id: string): SettledAnswer | undefined;
+    /** 按完成顺序保留有限数量的答案，气泡刷新后不再关闭时也不会无限增长。 */
+    rememberAnswer(scope: string, id: string, answer: SettledAnswer): void;
     /** 关闭可先于启动到达；短期墓碑阻止网络乱序重新启动请求。 */
     close(scope: string, id: string): Promise<SideResult>;
     dispose(): Promise<void>;

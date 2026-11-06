@@ -71,6 +71,13 @@ export declare const zh: {
     'quote.detailTitle': string;
     'quote.close': string;
     'quote.commentLabel': string;
+    'action.fork': string;
+    'bubble.forking': string;
+    'bubble.forked': string;
+    'error.forkGone': string;
+    'error.forkUnsupported': string;
+    'command.internalFork': string;
+    'agent.forkPrompt': string;
     'agent.name': string;
     'agent.promptPrefix': string;
     'quote.promptHeading': string;
