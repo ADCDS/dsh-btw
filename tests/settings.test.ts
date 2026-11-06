@@ -109,13 +109,12 @@ it('白名单非空时拒绝文案列出放行工具，空白名单保持 1.1.1 
   expect(message).toContain('白名单工具')
 })
 
-it('白名单写进 send_message 也不能让旁问把答案发给别的 agent', () => {
+it('白名单写进 send_message 也不能让旁问联系任何 agent', () => {
   const guard = createAnswerOnlyGuard(new Set(['owned']), undefined, () => ['send_message'])
   const agent = { session: { header: { id: 'btw-child', parentSession: 'parent-session' } } }
   guard.own(agent)
-  // 回传工具的归属校验优先于白名单，配置无法绕过「只能交回自己的主会话」。
   expect(guard({ agent, name: 'send_message', arguments: { agent_id: 'someone-else' } })).toContain('禁止执行任何工具')
-  expect(guard({ agent, name: 'send_message', arguments: { agent_id: 'parent-session' } })).toBeUndefined()
+  expect(guard({ agent, name: 'send_message', arguments: { agent_id: 'parent-session' } })).toContain('禁止执行任何工具')
 })
 
 it('白名单只作用于被认领的旁问代理，主任务工具不受影响', () => {

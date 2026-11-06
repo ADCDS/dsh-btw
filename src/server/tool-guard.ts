@@ -47,30 +47,15 @@ function denyFor(allowed: readonly string[]): string {
  * 工具白名单的读取函数。
  *
  * 用 getter 而不是快照：配置项在设置面板里是可写的，用户在面板里改完就应在下一次
- * 旁问里生效，不需要重载插件。返回空数组表示「只放行 send_message」。
+ * 旁问里生效，不需要重载插件。返回空数组表示「不放行任何工具」。
  */
 export type AllowedToolsOf = () => readonly string[]
 
 /**
- * 唯一放行的继承工具，且只能发给自己的父会话。复用宿主的 `send_message`
- * 而不是新注册工具，才能保持旁问请求的工具列表与主会话逐字节一致
- * （`tests/cache-prefix.test.ts` 的 prompt cache 复用护栏）。
+ * 旁问永远不能调用的工具，即使写进白名单也一样。发给父会话的消息会以 user 角色进入
+ * 主会话并启动新一轮，模型可以被上下文中的注入文本诱导发送，因此不留这条通道。
  */
-export const REPLY_TOOL = 'send_message'
-
-/** 本次旁问所属父会话的 id；没有父会话时不存在回传通道。 */
-export function parentSessionOf(agent: AgentIdentity | undefined): string | undefined {
-  const parent = (agent?.session as { header?: { parentSession?: unknown } } | undefined)?.header?.parentSession
-  return typeof parent === 'string' ? parent : undefined
-}
-
-/** 仅当工具是 `send_message` 且目标严格等于父会话 id 时放行，其余一律拒绝。 */
-function isReplyToParent(name: string | undefined, args: unknown, agent: AgentIdentity | undefined): boolean {
-  if (name !== REPLY_TOOL) return false
-  const target = (args as { agent_id?: unknown } | undefined)?.agent_id
-  const parent = parentSessionOf(agent)
-  return parent !== undefined && typeof target === 'string' && target === parent
-}
+export const MESSAGE_TOOL = 'send_message'
 
 function descriptorLabel(data: unknown): string | undefined {
   if (typeof data !== 'object' || data === null || !('label' in data) || typeof data.label !== 'string') return undefined
@@ -110,9 +95,7 @@ export function createAnswerOnlyGuard(labels: ReadonlySet<string>, identityOf?: 
   const allowedNow = (): string[] => {
     const names = allowedTools()
     if (!Array.isArray(names)) return []
-    // 回传工具由 `isReplyToParent` 单独把关（含父会话归属校验），不进白名单：
-    // 否则用户把 send_message 写进白名单就能让旁问把答案发给任意 agent。
-    return names.filter(name => typeof name === 'string' && name.length > 0 && name !== REPLY_TOOL)
+    return names.filter(name => typeof name === 'string' && name.length > 0 && name !== MESSAGE_TOOL)
   }
 
   const owned = new WeakSet<object>()
@@ -138,17 +121,12 @@ export function createAnswerOnlyGuard(labels: ReadonlySet<string>, identityOf?: 
     return false
   }
 
-  const guard: AnswerOnlyGuard = ({ agent, name, arguments: args }) => {
+  const guard: AnswerOnlyGuard = ({ agent, name }) => {
     if (!agent) return undefined
-    // 放行集合：把答案发回自己的父会话，加上用户配置的白名单工具。
-    // 其余工具、以及发给其它 agent 的 send_message 一律拒绝。
-    // 三条认领路径（预登记 id / 已认领对象 / 投影或快照 label）都必须返回 verdict，
-    // 否则 isOwnedId 先短路会让回传通道在生产主路径上失效。
+    // 放行集合只有用户配置的白名单工具，其余一律拒绝。
+    // 三条认领路径（预登记 id / 已认领对象 / 投影或快照 label）都必须返回 verdict。
     const allowed = allowedNow()
-    // 白名单只覆盖普通工具；回传工具的父会话归属校验由 `isReplyToParent` 独占，
-    // 配置无法把「只能交回自己的主会话」放宽成「发给任意 agent」。
-    const permitted = isReplyToParent(name, args, agent)
-      || (name !== undefined && allowed.includes(name))
+    const permitted = name !== undefined && allowed.includes(name)
     const verdict = permitted ? undefined : denyFor(allowed)
     if (isOwnedId(agent)) return verdict
     if (owned.has(agent) || (agent.session !== undefined && owned.has(agent.session))) return verdict

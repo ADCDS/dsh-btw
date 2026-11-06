@@ -73,13 +73,11 @@ export function apply(ctx: Context, config?: unknown): void {
     }
     const label = t('agent.name')
     retainLabel(label)
-    const parentId = (request.context as Agent | undefined)?.session?.header?.id
     const settings = settingsNow()
-    const replyHint = parentId === undefined ? '' : `\n\n${t('agent.replyHint', { parent: JSON.stringify(parentId) })}`
     // 自定义提示词替换内置前缀；工具权限句始终追加，配置不能让模型误以为「什么都能调」。
     const permissions = settings.allowedTools.length === 0 ? '' : `\n\n${t('agent.toolsAllowed', { tools: settings.allowedTools.join(', ') })}`
     const prefix = settings.promptPrefix === '' ? t('agent.promptPrefix') : settings.promptPrefix
-    const promptText = `${prefix}${permissions}${replyHint}\n\n${request.question}`
+    const promptText = `${prefix}${permissions}\n\n${request.question}`
     const subagents = ctx.subagents as unknown as {
       startActivation?: (spec: {
         provider: string

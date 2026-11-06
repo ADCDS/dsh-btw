@@ -1,3 +1,5 @@
+> **ADCDS fork** of [MichengAI/dsh-btw](https://github.com/MichengAI/dsh-btw) v1.3.5 (Apache-2.0). Modified so a side question can never call `send_message`, which removes the "send it back" feature; `src/server/tool-guard.ts`, `src/server/settings.ts`, `src/index.ts`, `src/locales.ts`, the tests and these docs changed. The install commands below name the upstream npm package; install this fork from its [releases](https://github.com/ADCDS/dsh-btw/releases).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichengAI/dsh-btw/2d8dd7752cec1b29dd705969eaa932635ba0bf4f/assets/branding/dsh-btw-banner.png" alt="DSH BTW" width="100%">
 </p>
@@ -23,8 +25,8 @@
 - **Context-aware questions**: explain concepts, recap conclusions, or ask a quick question about the current conversation.
 - **Answers only**: no reading new files, browsing the web, running commands, or editing code.
 - **Independent answer bubbles**: render Markdown and formulas, copy answers, collapse, expand, and close individual bubbles. Multiple answers can stay visible.
-- **Keep the main task going**: side questions are answered separately and by default do not add answers to the main conversation.
-- **Return on request**: when you want the conclusion available to the main conversation, ask for it in the question ("send the answer back to the main conversation") and the side ask uses `send_message` to deliver a self-contained answer to the main session. It does not send anything when you did not ask.
+- **Keep the main task going**: side questions are answered separately, and their answers do not reach the main conversation's model.
+- **No path back**: a side question cannot send anything to the main session, even if you ask it to. Copy the answer if you need it there.
 - **Cancel anytime**: close a bubble while it is answering to cancel that question.
 - **Themes and languages**: follow DSH light and dark themes and switch between Chinese and English UI.
 
@@ -161,14 +163,14 @@ Open **Plugins**, find `@michengai/dsh-btw`, and open **Configure** on its row. 
 
 | Field | Effect |
 | --- | --- |
-| **Allowed tools** | Tool names the side question may call in addition to `send_message`, one per line (for example `pele_draw`). Empty allows text answers only, which is the default. |
+| **Allowed tools** | Tool names the side question may call, one per line (for example `pele_draw`). Empty allows text answers only, which is the default. |
 | **Custom prompt** | Instruction text that replaces the built-in side-question prompt. The box is pre-filled with the built-in prompt so you can edit it in place; saving it unchanged restores the default. |
 
 Notes:
 
 - The whitelist widens what the side question may call; the main conversation is never restricted by it. A name that does not exist simply allows nothing.
-- `send_message` is not a whitelist entry. Delivering an answer back to the main conversation stays bound to the rule that it may only target the side question's own parent session, so a whitelist entry cannot turn it into "send to any agent".
-- The custom prompt replaces the instruction prefix only. The tool-permission sentence and the reply-channel sentence are always appended, so the model never believes it can call everything.
+- `send_message` is refused even when listed: a message to the main session arrives there as a user message and starts a turn.
+- The custom prompt replaces the instruction prefix only. The tool-permission sentence is always appended, so the model never believes it can call everything.
 - Changes apply to the next side question without reloading the plugin.
 - The permission sentence names the allowed tools, so widening the whitelist changes the side-question prompt. That prompt is a trailing user message; the tool list and system prompt stay byte-identical to the main conversation, so parent prompt cache reuse is unaffected.
 

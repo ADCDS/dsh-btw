@@ -42,7 +42,7 @@ const MAX_ALLOWED_TOOLS = 64
 
 export const Config = z.object({
   allowedTools: volatileField(z.array(z.string()).default([]).description(
-    'Tools the side question may call besides send_message, one tool name each (for example pele_draw). Empty keeps the default text-only behaviour.',
+    'Tools the side question may call, one tool name each (for example pele_draw). send_message is never allowed. Empty keeps the default text-only behaviour.',
   )),
   promptPrefix: volatileField(z.string().default('').description(
     'Instruction text that replaces the built-in side-question prompt. Empty keeps the built-in prompt; the tool-permission sentence is always appended.',
@@ -51,7 +51,7 @@ export const Config = z.object({
 
 /** 解析后的配置：只保留执行期真正会用到的两个值。 */
 export interface BtwSettings {
-  /** 除 send_message 之外允许调用的工具名（已去重、去空、截断）。 */
+  /** 允许调用的工具名（已去重、去空、截断）；send_message 永远不放行。 */
   readonly allowedTools: readonly string[]
   /** 覆盖内置提示词的自定义指令；空串表示使用内置文案。 */
   readonly promptPrefix: string

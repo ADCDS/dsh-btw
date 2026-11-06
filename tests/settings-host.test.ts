@@ -150,7 +150,7 @@ describe(`DSH ${runtimeVersion} 旁问设置项接线`, () => {
     expect(h.calls[0]!.isError).toBe(true)
     expect(h.calls[0]!.content).toContain('BTW 仅允许文字回答，禁止执行任何工具。')
     expect(h.execute).not.toHaveBeenCalled()
-    expect(h.prompts[0]).toContain('除 send_message 之外任何工具调用都会被拒绝')
+    expect(h.prompts[0]).toContain('本次旁问中任何工具调用都会被拒绝')
     expect(h.prompts[0]).not.toContain('白名单')
     await h.dispose()
   })
@@ -163,7 +163,7 @@ describe(`DSH ${runtimeVersion} 旁问设置项接线`, () => {
     // 权限说明始终追加，配置不能让「能调什么」的边界从提示词里消失。
     expect(h.prompts[0]).toContain('pele_draw')
     expect(h.prompts[0]).toContain('额外放行这些工具')
-    expect(h.prompts[0]).toContain('除 send_message 之外任何工具调用都会被拒绝')
+    expect(h.prompts[0]).toContain('本次旁问中任何工具调用都会被拒绝')
     await h.dispose()
   })
 
@@ -171,7 +171,7 @@ describe(`DSH ${runtimeVersion} 旁问设置项接线`, () => {
     const h = await harness({ allowedTools: ['pele_draw'], promptPrefix: '只给结论与依据。' }, [childProbe])
     expect(await h.ask('自定义前缀')).toMatchObject({ kind: 'success' })
     expect(h.prompts[0]!.startsWith('只给结论与依据。')).toBe(true)
-    expect(h.prompts[0]).not.toContain('除 send_message 之外任何工具调用都会被拒绝')
+    expect(h.prompts[0]).not.toContain('本次旁问中任何工具调用都会被拒绝')
     expect(h.prompts[0]).toContain('pele_draw')
     expect(h.prompts[0]).toContain('自定义前缀')
     await h.dispose()
