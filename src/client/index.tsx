@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { MessageCircle } from 'lucide-react'
-import { CLOSE_COMMAND, RUN_COMMAND, type SideResult } from '../shared'
+import { CLOSE_COMMAND, FORK_COMMAND, RUN_COMMAND, type SideResult } from '../shared'
 import { BubbleStore, SideRequestNotStartedError } from './bubbles'
 import { BubbleDock } from './BubbleView'
 import { QuoteStore } from './quotes'
@@ -140,6 +140,7 @@ export function apply(ctx: Context): void {
   const store = new BubbleStore({
     run: (session, id, question, signal, reference) => execute(session, `/${RUN_COMMAND} ${JSON.stringify({ id, question, reference, locale: normalizeLocale(t('locale.id')) })}`, signal),
     close: (session, id) => execute(session, `/${CLOSE_COMMAND} ${id}`),
+    fork: (session, id) => execute(session, `/${FORK_COMMAND} ${id}`),
   }, t)
   const quoteStore = new QuoteStore()
 
@@ -330,7 +331,7 @@ export function apply(ctx: Context): void {
     return () => disposers.forEach(d => d())
   })
   slots.inject('conversation.chat.commandview', () => {
-    const off = [RUN_COMMAND, CLOSE_COMMAND].map(key => slots.register({ name: 'conversation.chat.commandview', key }, () => null))
+    const off = [RUN_COMMAND, CLOSE_COMMAND, FORK_COMMAND].map(key => slots.register({ name: 'conversation.chat.commandview', key }, () => null))
     return () => off.forEach(dispose => dispose())
   })
 

@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useSyncExternalStore } from 'react'
-import { Check, ChevronDown, ChevronUp, Copy, LoaderCircle, MessageCircle, Square, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, GitFork, LoaderCircle, MessageCircle, Square, X } from 'lucide-react'
 import { AnswerMarkdown } from './answer-markdown'
 import type { Bubble, BubbleStore } from './bubbles'
 import type { BtwTranslate } from '../locales'
 
-export function BubbleView({ item, close, t, collapsed, onToggleCollapse }: {
+export function BubbleView({ item, close, fork, t, collapsed, onToggleCollapse }: {
   item: Bubble
   close: () => void
+  fork?: () => void
   t: BtwTranslate
   collapsed: boolean
   onToggleCollapse: () => void
@@ -33,6 +34,7 @@ export function BubbleView({ item, close, t, collapsed, onToggleCollapse }: {
       <span className="btw-symbol"><MessageCircle size={16} /></span>
       <span className="btw-question">{item.question}</span>
       <div className="btw-actions">
+        {fork && item.phase === 'done' && item.answer && item.forkedTo === undefined && <button type="button" title={t('action.fork')} aria-label={t('action.fork')} disabled={item.forking} onClick={fork}><GitFork size={16} /></button>}
         {item.answer && <button type="button" title={t(copied ? 'action.copied' : 'action.copy')} aria-label={t('action.copy')} onClick={() => { void copy() }}>{copied ? <Check size={16} /> : <Copy size={16} />}</button>}
         <button type="button" title={t(collapsed ? 'action.expand' : 'action.collapse')} aria-label={t(collapsed ? 'action.expand' : 'action.collapse')} aria-expanded={!collapsed} onClick={onToggleCollapse}>{collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
         <button
@@ -50,6 +52,8 @@ export function BubbleView({ item, close, t, collapsed, onToggleCollapse }: {
     {!collapsed && item.reference && <details className="btw-reference"><summary>{t('selection.reference')}</summary><blockquote>{item.reference}</blockquote></details>}
     {busy && <div className="btw-status" role="status"><LoaderCircle size={14} className="btw-spinner" />{t(item.phase === 'closing' ? 'status.closing' : 'status.answering')}</div>}
     {!collapsed && item.answer && <div className="btw-answer"><AnswerMarkdown text={item.answer} labels={labels} imageLabel={t('bubble.image')} /></div>}
+    {item.forking && <div className="btw-status" role="status"><LoaderCircle size={14} className="btw-spinner" />{t('bubble.forking')}</div>}
+    {item.forkedTo !== undefined && <div className="btw-status" role="status"><GitFork size={14} />{t('bubble.forked', { name: item.forkedTo })}</div>}
     {item.error && <p className="btw-error" role="alert">{item.closeFailed ? t('error.close', { detail: item.error }) : item.error}</p>}
     {copyError && <p className="btw-error" role="alert">{t('error.copy')}</p>}
   </article>
@@ -88,6 +92,7 @@ export function BubbleDock({ store, sessionId, t }: { store: BubbleStore; sessio
           else setManual({ id: item.id, knownIds: currentIds })
         }}
         close={() => { void store.close(item.id) }}
+        fork={() => { void store.fork(item.id) }}
       />
     ))}
   </div>

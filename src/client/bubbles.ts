@@ -21,10 +21,15 @@ export interface Bubble {
   phase: 'answering' | 'done' | 'error' | 'closing'
   error?: string
   closeFailed?: boolean
+  /** 正在把这条旁问转入后台子代理。 */
+  forking?: boolean
+  /** 已转入的子代理名称；之后关闭气泡不影响子代理。 */
+  forkedTo?: string
 }
 export interface SideTransport {
   run(session: string, id: string, question: string, signal: AbortSignal, reference?: string): Promise<SideResult>
   close(session: string, id: string): Promise<SideResult>
+  fork?(session: string, id: string): Promise<SideResult>
 }
 
 /** 宿主在进入 handler 前明确拒绝启动；没有后台任务需要清理。 */
@@ -111,6 +116,21 @@ export class BubbleStore {
       if (!this.closing.has(id)) this.update(id, { phase: 'error', error: message })
     }).finally(() => { this.active.delete(id) })
     return id
+  }
+
+  /** 用户点击后才转入；失败时保留答案和按钮以便重试，宿主保证同一旁问只启动一次。 */
+  async fork(id: string): Promise<void> {
+    const item = this.snapshot.find(bubble => bubble.id === id)
+    if (!item || item.phase !== 'done' || item.forking || item.forkedTo !== undefined) return
+    this.update(id, { forking: true, error: undefined })
+    try {
+      if (!this.transport.fork) throw new Error(this.t('error.backend'))
+      const result = await this.transport.fork(item.sessionId, id)
+      if (result.kind === 'error') throw new Error(result.text)
+      this.update(id, { forking: false, forkedTo: result.text })
+    } catch (error) {
+      this.update(id, { forking: false, error: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   close(id: string): Promise<void> {

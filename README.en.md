@@ -1,4 +1,4 @@
-> **ADCDS fork** of [MichengAI/dsh-btw](https://github.com/MichengAI/dsh-btw) v1.3.5 (Apache-2.0). Modified so a side question can never call `send_message`, which removes the "send it back" feature; `src/server/tool-guard.ts`, `src/server/settings.ts`, `src/index.ts`, `src/locales.ts`, the tests and these docs changed. The install commands below name the upstream npm package; install this fork from its [releases](https://github.com/ADCDS/dsh-btw/releases).
+> **ADCDS fork** of [MichengAI/dsh-btw](https://github.com/MichengAI/dsh-btw) v1.3.5 (Apache-2.0). Modified so a side question can never call `send_message`, which removes the "send it back" feature, and so an answer can be continued in a background subagent by clicking a button; `src/server/tool-guard.ts`, `src/server/settings.ts`, `src/index.ts`, `src/locales.ts`, the tests and these docs changed. The install commands below name the upstream npm package; install this fork from its [releases](https://github.com/ADCDS/dsh-btw/releases).
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichengAI/dsh-btw/2d8dd7752cec1b29dd705969eaa932635ba0bf4f/assets/branding/dsh-btw-banner.png" alt="DSH BTW" width="100%">
@@ -26,7 +26,7 @@
 - **Answers only**: no reading new files, browsing the web, running commands, or editing code.
 - **Independent answer bubbles**: render Markdown and formulas, copy answers, collapse, expand, and close individual bubbles. Multiple answers can stay visible.
 - **Keep the main task going**: side questions are answered separately, and their answers do not reach the main conversation's model.
-- **No path back**: a side question cannot send anything to the main session, even if you ask it to. Copy the answer if you need it there.
+- **Continue as a subagent**: a side question cannot send anything to the main session by itself. To take it further, click **Continue in a background subagent** on the answer. That starts a real subagent that inherits the main session's completed turns plus this question and answer, with tools under the main session's permissions. You stay in the current session, the subagent appears in the session header's subagent list, and its final message goes to the main session.
 - **Cancel anytime**: close a bubble while it is answering to cancel that question.
 - **Themes and languages**: follow DSH light and dark themes and switch between Chinese and English UI.
 

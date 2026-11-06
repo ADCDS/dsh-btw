@@ -4,9 +4,9 @@ import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-subagent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
-import { CLOSE_COMMAND, MAX_QUESTION_LENGTH, parseRequest, questionWithReference, RUN_COMMAND } from './shared'
+import { CLOSE_COMMAND, FORK_COMMAND, fenced, forkLabel, MAX_QUESTION_LENGTH, parseRequest, questionWithReference, RUN_COMMAND } from './shared'
 import { SIDE_MAX_OUTPUT_TOKENS } from './limits'
-import { DEFAULT_TIMEOUT_MS, SideJobs } from './server/jobs'
+import { DEFAULT_TIMEOUT_MS, SideJobs, type SettledAnswer } from './server/jobs'
 import { createAnswerOnlyGuard, identityOfFromContext } from './server/tool-guard'
 import { readSettings } from './server/settings'
 import { translate } from './locales'
@@ -15,6 +15,21 @@ import { hideInternalCommands } from './server/command-visibility'
 export const name = 'michengai-btw'
 export const inject = ['commands', 'subagents', 'tools']
 export { Config } from './server/settings'
+
+interface ActivationTask {
+  parent: Agent
+  prompt: readonly { type: string; text: string }[]
+  agentOptions?: { maxTokens?: number }
+  maxDepth?: number
+}
+
+/**
+ * 发布版 DSH 0.2.2-rc.1 从 `spec.request` 读取任务，之后的主干读取 spec 顶层字段，
+ * 而两者的版本号相同。同时提供两种写法，兼容范围内的宿主都能启动。
+ */
+function activationSpec<T extends object>(base: T, task: ActivationTask): T & ActivationTask & { request: ActivationTask } {
+  return { ...base, ...task, request: task }
+}
 
 interface GuardedAgent {
   ctx?: {
@@ -79,11 +94,11 @@ export function apply(ctx: Context, config?: unknown): void {
     const prefix = settings.promptPrefix === '' ? t('agent.promptPrefix') : settings.promptPrefix
     const promptText = `${prefix}${permissions}\n\n${request.question}`
     const subagents = ctx.subagents as unknown as {
-      startActivation?: (spec: {
+      startActivation?: (spec: ActivationTask & {
         provider: string
         label: string
         childId: ReturnType<typeof SessionId>
-        request: { parent: Agent; prompt: readonly { type: string; text: string }[]; agentOptions?: { maxTokens?: number } }
+        request: ActivationTask
         signal: AbortSignal
         delivery: 'caller'
       }) => Promise<{ result: Promise<{ stopReason: string; output: readonly { type: string; text?: string }[] }>; dispose(): Promise<void> }>
@@ -115,20 +130,19 @@ export function apply(ctx: Context, config?: unknown): void {
         })
         let activation
         try {
-          activation = await subagents.startActivation({
+          activation = await subagents.startActivation(activationSpec({
             provider: 'fork',
             label,
             childId,
-            request: {
-              parent: request.context as Agent,
-              // 旁问只需一次性只读回答：收紧继承来的过大输出预算，避免长会话溢出；
-              // 同时取 min 避免反向抬高小预算路由。
-              agentOptions: { maxTokens },
-              prompt: [{ type: 'text', text: promptText }],
-            },
             signal: request.signal,
-            delivery: 'caller',
-          })
+            delivery: 'caller' as const,
+          }, {
+            parent: request.context as Agent,
+            // 旁问只需一次性只读回答：收紧继承来的过大输出预算，避免长会话溢出；
+            // 同时取 min 避免反向抬高小预算路由。
+            agentOptions: { maxTokens },
+            prompt: [{ type: 'text', text: promptText }],
+          }))
         } finally {
           stopCreated()
         }
@@ -179,6 +193,39 @@ export function apply(ctx: Context, config?: unknown): void {
   })
   ctx.effect(() => () => jobs.dispose())
 
+  /**
+   * 把旁问转为真正的后台子代理：继承主会话已完成的上下文和问答，拥有工具，结束后向
+   * 主会话汇报。标签不在 `labels` 中，因此不受只答不做的保护，这是用户点击后的明确授权。
+   */
+  const startFork = async (parent: Agent, answered: SettledAnswer, signal: AbortSignal): Promise<string> => {
+    const t = translate(answered.locale)
+    const subagents = ctx.subagents as unknown as {
+      getProvider(name: string): { inheritsParentContext?: boolean } | undefined
+      resolveMaxDepth?: () => number | undefined
+      startActivation?: (spec: ActivationTask & {
+        provider: string
+        label: string
+        request: ActivationTask
+        signal: AbortSignal
+        delivery: 'parent'
+      }) => Promise<{ name: string }>
+    }
+    if (!subagents.getProvider('fork')?.inheritsParentContext) throw new Error(t('error.provider'))
+    if (typeof subagents.startActivation !== 'function') throw new Error(t('error.forkUnsupported'))
+    const maxDepth = subagents.resolveMaxDepth?.()
+    const started = await subagents.startActivation(activationSpec({
+      provider: 'fork',
+      label: forkLabel(answered.title),
+      signal,
+      delivery: 'parent' as const,
+    }, {
+      parent,
+      prompt: [{ type: 'text', text: t('agent.forkPrompt', { question: fenced(answered.question), answer: fenced(answered.answer) }) }],
+      ...maxDepth === undefined ? {} : { maxDepth },
+    }))
+    return started.name
+  }
+
   ctx.effect(() => ctx.commands.register({
     name: 'btw',
     description: translate()('command.description'),
@@ -198,8 +245,26 @@ export function apply(ctx: Context, config?: unknown): void {
     handler: invocation => {
       try {
         const request = parseRequest(invocation.rawInput)
-        return jobs.ask(invocation.agent.session.header.id, request.id, questionWithReference(request.question, request.reference, request.locale), invocation.signal, invocation.agent, request.locale)
+        return jobs.ask(invocation.agent.session.header.id, request.id, questionWithReference(request.question, request.reference, request.locale), invocation.signal, invocation.agent, request.locale, request.question)
       } catch (error) { return { kind: 'error', text: error instanceof Error ? error.message : translate()('error.request') } }
+    },
+  }))
+  ctx.effect(() => ctx.commands.register({
+    name: FORK_COMMAND,
+    description: translate()('command.internalFork'),
+    recordInput: false,
+    handler: async (invocation) => {
+      const id = invocation.rawInput.trim()
+      if (!/^[a-zA-Z0-9-]{8,80}$/.test(id)) return { kind: 'error', text: translate()('error.id') }
+      const scope = invocation.agent.session.header.id
+      const answered = jobs.takeAnswer(scope, id)
+      if (!answered) return { kind: 'error', text: translate()('error.forkGone') }
+      try {
+        return { kind: 'success', text: await startFork(invocation.agent, answered, invocation.signal) }
+      } catch (error) {
+        jobs.rememberAnswer(scope, id, answered)
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+      }
     },
   }))
   ctx.effect(() => ctx.commands.register({

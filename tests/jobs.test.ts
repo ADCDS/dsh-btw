@@ -249,3 +249,52 @@ describe('一次性旁问生命周期', () => {
     expect(sanitizeModelAnswer('<tool_call>\n{"name": "fail"}\n</tool_call>')).toBe('')
   })
 })
+
+describe('保留已完成的回答供转入子代理', () => {
+  const finished = () => new SideJobs(async () => ({ result: Promise.resolve(answer), dispose: async () => {} }), 90_000)
+
+  it('成功后可以取走一次，内容来自宿主', async () => {
+    const jobs = finished()
+    await jobs.ask('A', 'request01', '带引用的完整问题', undefined, undefined, 'en', '问题')
+    expect(jobs.takeAnswer('A', 'request01')).toEqual({ question: '带引用的完整问题', title: '问题', answer: '答案', locale: 'en' })
+    expect(jobs.takeAnswer('A', 'request01')).toBeUndefined()
+  })
+
+  it('父会话是所有权边界', async () => {
+    const jobs = finished()
+    await jobs.ask('A', 'request01', '问题')
+    expect(jobs.takeAnswer('B', 'request01')).toBeUndefined()
+    expect(jobs.takeAnswer('A', 'request01')).toBeDefined()
+  })
+
+  it('失败或被取消的旁问不保留', async () => {
+    const failing = new SideJobs(async () => ({ result: Promise.resolve({ stopReason: 'error', output: [] }), dispose: async () => {} }), 90_000)
+    expect((await failing.ask('A', 'request01', '问题')).kind).toBe('error')
+    expect(failing.takeAnswer('A', 'request01')).toBeUndefined()
+    const pending = deferred<typeof answer>()
+    const hanging = new SideJobs(async () => ({ result: pending.promise, dispose: async () => {} }), 90_000)
+    const asked = hanging.ask('A', 'request02', '问题')
+    await tick()
+    await hanging.close('A', 'request02')
+    await asked
+    expect(hanging.takeAnswer('A', 'request02')).toBeUndefined()
+  })
+
+  it('关闭和卸载都会清除', async () => {
+    const jobs = finished()
+    await jobs.ask('A', 'request01', '问题')
+    await jobs.ask('A', 'request02', '问题')
+    await jobs.close('A', 'request01')
+    expect(jobs.takeAnswer('A', 'request01')).toBeUndefined()
+    await jobs.dispose()
+    expect(jobs.takeAnswer('A', 'request02')).toBeUndefined()
+  })
+
+  it('数量有界，超出时丢弃最早的回答', async () => {
+    const jobs = finished()
+    for (let index = 0; index < 33; index++) jobs.rememberAnswer('A', `request${index}`, { question: 'q', title: 'q', answer: 'a', locale: 'zh' })
+    expect(jobs.takeAnswer('A', 'request0')).toBeUndefined()
+    expect(jobs.takeAnswer('A', 'request1')).toBeDefined()
+    expect(jobs.takeAnswer('A', 'request32')).toBeDefined()
+  })
+})

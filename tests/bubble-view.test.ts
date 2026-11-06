@@ -177,3 +177,44 @@ it('DOM 隔离：头部采用 div.btw-header 并使用 data-btw-phase，避免�
   expect(header?.tagName.toLowerCase()).toBe('div')
   expect(container.querySelector('header')).toBeNull()
 })
+
+const renderFork = async (item: Partial<Bubble>, fork = vi.fn()) => {
+  await act(async () => root.render(React.createElement(BubbleView, {
+    item: { id: 'request01', sessionId: 'session', question: '问题', answer, phase: 'done', ...item },
+    close,
+    fork,
+    t: translate('en'),
+    collapsed: false,
+    onToggleCollapse: () => {},
+  })))
+  return fork
+}
+const forkLabel = 'Continue in a background subagent'
+const forkButton = () => container.querySelector<HTMLButtonElement>(`button[aria-label="${forkLabel}"]`)
+
+it('已完成的回答提供转入按钮，点击后才触发', async () => {
+  const fork = await renderFork({})
+  expect(fork).not.toHaveBeenCalled()
+  await click(forkLabel)
+  expect(fork).toHaveBeenCalledOnce()
+})
+
+it('回答中、关闭中、失败时都没有转入按钮', async () => {
+  for (const phase of ['answering', 'closing', 'error'] as const) {
+    await renderFork({ phase })
+    expect(forkButton()).toBeNull()
+  }
+})
+
+it('转入中禁用按钮并显示状态', async () => {
+  await renderFork({ forking: true })
+  expect(forkButton()?.disabled).toBe(true)
+  expect(container.textContent).toContain('Starting subagent')
+})
+
+it('转入后隐藏按钮并说明去哪里查看', async () => {
+  await renderFork({ forkedTo: 'agent-1' })
+  expect(forkButton()).toBeNull()
+  expect(container.textContent).toContain('subagent agent-1')
+  expect(container.textContent).toContain('subagent list')
+})

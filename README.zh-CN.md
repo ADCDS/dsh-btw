@@ -1,4 +1,4 @@
-> **ADCDS 分支**，基于 [MichengAI/dsh-btw](https://github.com/MichengAI/dsh-btw) v1.3.5（Apache-2.0）。修改内容：旁问永远不能调用 `send_message`，因此移除了「发回主对话」功能；改动了 `src/server/tool-guard.ts`、`src/server/settings.ts`、`src/index.ts`、`src/locales.ts`、测试和这些文档。下方安装命令指向上游 npm 包；请从本分支的 [Releases](https://github.com/ADCDS/dsh-btw/releases) 安装。
+> **ADCDS 分支**，基于 [MichengAI/dsh-btw](https://github.com/MichengAI/dsh-btw) v1.3.5（Apache-2.0）。修改内容：旁问永远不能调用 `send_message`，因此移除了「发回主对话」功能，并可通过点击按钮把回答转入后台子智能体继续；改动了 `src/server/tool-guard.ts`、`src/server/settings.ts`、`src/index.ts`、`src/locales.ts`、测试和这些文档。下方安装命令指向上游 npm 包；请从本分支的 [Releases](https://github.com/ADCDS/dsh-btw/releases) 安装。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichengAI/dsh-btw/2d8dd7752cec1b29dd705969eaa932635ba0bf4f/assets/branding/dsh-btw-banner.png" alt="DSH BTW" width="100%">
@@ -26,7 +26,7 @@
 - **只回答，不执行**：不会读取新文件、联网、运行命令或修改代码。
 - **独立答案气泡**：支持 Markdown、公式、复制、折叠、展开和关闭，可同时查看多条旁问。
 - **不打断主任务**：旁问单独作答，答案不会进入主对话模型的上下文。
-- **不回传**：旁问不能向主会话发送任何内容，即使你要求也不会。需要时请复制答案。
+- **转入子智能体**：旁问自身不能向主会话发送任何内容。需要进一步处理时，点击回答上的**转入后台子智能体继续**。这会启动真正的子智能体，它继承主会话已完成的轮次以及这组问答，并在主会话的权限下使用工具。你留在当前会话，子智能体显示在会话页头的子智能体列表中，它的最后一条消息会交给主会话。
 - **随时取消**：关闭正在回答的气泡即可取消该旁问。
 - **主题与国际化**：跟随 DSH 浅色、深色主题，界面支持中文和英文切换。
 

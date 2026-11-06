@@ -1,6 +1,6 @@
 import { webcrypto } from 'node:crypto'
 import { afterEach, expect, it, vi } from 'vitest'
-import { BubbleStore, SideRequestNotStartedError } from '../src/client/bubbles'
+import { BubbleStore, SideRequestNotStartedError, type SideTransport } from '../src/client/bubbles'
 import { parseRequest } from '../src/shared'
 import { translate } from '../src/locales'
 
@@ -268,4 +268,61 @@ it('安全上下文下旁问 id 仍是合法 UUID v4 格式', async () => {
   const store = new BubbleStore({ run: async () => ({ kind: 'success', text: '' }), close: async () => ({ kind: 'success', text: '' }) })
   const id = await store.ask('session', '问题')
   expect(id).toMatch(UUID_V4)
+})
+
+const answered = async (transport: Partial<SideTransport> = {}) => {
+  const store = new BubbleStore({
+    run: vi.fn().mockResolvedValue({ kind: 'success', text: '回答' }),
+    close: vi.fn().mockResolvedValue({ kind: 'success', text: '' }),
+    ...transport,
+  })
+  const id = await store.ask('A', '问题')
+  await tick()
+  return { store, id, item: () => store.getSnapshot().find(bubble => bubble.id === id) }
+}
+
+it('转入子代理后记录名称，重复点击不会再次启动', async () => {
+  const fork = vi.fn().mockResolvedValue({ kind: 'success', text: 'agent-1' })
+  const { store, id, item } = await answered({ fork })
+  await Promise.all([store.fork(id), store.fork(id)])
+  expect(fork).toHaveBeenCalledOnce()
+  expect(fork).toHaveBeenCalledWith('A', id)
+  expect(item()).toMatchObject({ forking: false, forkedTo: 'agent-1', phase: 'done', answer: '回答' })
+  await store.fork(id)
+  expect(fork).toHaveBeenCalledOnce()
+})
+
+it('转入失败时显示原因并允许重试', async () => {
+  const fork = vi.fn()
+    .mockResolvedValueOnce({ kind: 'error', text: '已达到上限' })
+    .mockRejectedValueOnce(new Error('连接断开'))
+    .mockResolvedValueOnce({ kind: 'success', text: 'agent-2' })
+  const { store, id, item } = await answered({ fork })
+  await store.fork(id)
+  expect(item()).toMatchObject({ forking: false, error: '已达到上限', phase: 'done' })
+  expect(item()?.forkedTo).toBeUndefined()
+  await store.fork(id)
+  expect(item()).toMatchObject({ error: '连接断开', phase: 'done' })
+  await store.fork(id)
+  expect(item()).toMatchObject({ forkedTo: 'agent-2', error: undefined })
+})
+
+it('只有已完成的回答可以转入', async () => {
+  const fork = vi.fn().mockResolvedValue({ kind: 'success', text: 'agent-1' })
+  const pending = new Promise<{ kind: 'success'; text: string }>(() => {})
+  const store = new BubbleStore({ run: () => pending, close: vi.fn().mockResolvedValue({ kind: 'success', text: '' }), fork })
+  const id = await store.ask('A', '问题')
+  await tick()
+  await store.fork(id)
+  await store.fork('missing')
+  expect(fork).not.toHaveBeenCalled()
+})
+
+it('关闭已转入的气泡只关闭气泡', async () => {
+  const fork = vi.fn().mockResolvedValue({ kind: 'success', text: 'agent-1' })
+  const { store, id } = await answered({ fork })
+  await store.fork(id)
+  await store.close(id)
+  expect(store.getSnapshot()).toHaveLength(0)
+  expect(fork).toHaveBeenCalledOnce()
 })

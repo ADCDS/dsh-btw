@@ -19,6 +19,17 @@ export interface ChildRequest {
 }
 export type StartChild = (request: ChildRequest) => Promise<ChildRun>
 
+/** 已完成的旁问；转为后台子代理时由宿主提供，不信任客户端传回的问答内容。 */
+export interface SettledAnswer {
+  question: string
+  /** 不含引用原文的问题，用作子代理标签。 */
+  title: string
+  answer: string
+  locale: BtwLocale
+}
+
+const MAX_SETTLED_ANSWERS = 32
+
 interface Job {
   key: string
   controller: AbortController
@@ -54,6 +65,7 @@ export const DEFAULT_TIMEOUT_MS = 1_800_000 // 30 分钟兜底看门狗，防长
 export class SideJobs {
   private readonly jobs = new Map<string, Job>()
   private readonly retired = new Map<string, number>()
+  private readonly settled = new Map<string, SettledAnswer>()
   private disposed = false
   private idleNotified = false
 
@@ -61,7 +73,7 @@ export class SideJobs {
 
   get size(): number { return this.jobs.size }
 
-  ask(scope: string, id: string, question: string, signal?: AbortSignal, context?: unknown, locale: BtwLocale = 'zh'): Promise<SideResult> {
+  ask(scope: string, id: string, question: string, signal?: AbortSignal, context?: unknown, locale: BtwLocale = 'zh', title: string = question): Promise<SideResult> {
     const key = JSON.stringify([scope, id])
     const t = translate(locale)
     this.prune()
@@ -78,6 +90,12 @@ export class SideJobs {
       : undefined
     timer?.unref?.()
     job.finished = this.execute(job, { scope, id, question, signal: job.controller.signal, context, locale })
+      .then((result) => {
+        if (result.kind === 'success' && !job.controller.signal.aborted) {
+          this.rememberAnswer(scope, id, { question, title, answer: result.text, locale })
+        }
+        return result
+      })
       .finally(() => {
         if (timer) clearTimeout(timer)
         signal?.removeEventListener('abort', cancel)
@@ -86,10 +104,28 @@ export class SideJobs {
     return job.finished
   }
 
+  /** 取走已完成的旁问，防止重复转入；启动失败时用 rememberAnswer 放回以便重试。 */
+  takeAnswer(scope: string, id: string): SettledAnswer | undefined {
+    const key = JSON.stringify([scope, id])
+    const answer = this.settled.get(key)
+    this.settled.delete(key)
+    return answer
+  }
+
+  /** 按完成顺序保留有限数量的答案，气泡刷新后不再关闭时也不会无限增长。 */
+  rememberAnswer(scope: string, id: string, answer: SettledAnswer): void {
+    if (this.disposed) return
+    const key = JSON.stringify([scope, id])
+    this.settled.delete(key)
+    this.settled.set(key, answer)
+    while (this.settled.size > MAX_SETTLED_ANSWERS) this.settled.delete(this.settled.keys().next().value as string)
+  }
+
   /** 关闭可先于启动到达；短期墓碑阻止网络乱序重新启动请求。 */
   async close(scope: string, id: string): Promise<SideResult> {
     const key = JSON.stringify([scope, id])
     this.retire(key)
+    this.settled.delete(key)
     const job = this.jobs.get(key)
     if (!job) return { kind: 'success', text: '' }
     job.controller.abort(new Error(job.t('error.cancelled')))
@@ -104,6 +140,7 @@ export class SideJobs {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    this.settled.clear()
     await Promise.all([...this.jobs.values()].map(async job => {
       job.controller.abort(new Error(job.t('error.cancelled')))
       try { await this.cleanup(job) }
