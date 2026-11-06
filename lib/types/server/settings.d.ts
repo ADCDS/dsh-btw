@@ -37,7 +37,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
 }>>, "defined">;
 /** 解析后的配置：只保留执行期真正会用到的两个值。 */
 export interface BtwSettings {
-    /** 除 send_message 之外允许调用的工具名（已去重、去空、截断）。 */
+    /** 允许调用的工具名（已去重、去空、截断）；send_message 永远不放行。 */
     readonly allowedTools: readonly string[];
     /** 覆盖内置提示词的自定义指令；空串表示使用内置文案。 */
     readonly promptPrefix: string;

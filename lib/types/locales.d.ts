@@ -73,7 +73,6 @@ export declare const zh: {
     'quote.commentLabel': string;
     'agent.name': string;
     'agent.promptPrefix': string;
-    'agent.replyHint': string;
     'quote.promptHeading': string;
     'quote.promptInstruction': string;
     'quote.userRequestHeading': string;

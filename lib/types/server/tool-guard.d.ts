@@ -33,17 +33,14 @@ export interface AnswerOnlyGuard {
  * 工具白名单的读取函数。
  *
  * 用 getter 而不是快照：配置项在设置面板里是可写的，用户在面板里改完就应在下一次
- * 旁问里生效，不需要重载插件。返回空数组表示「只放行 send_message」。
+ * 旁问里生效，不需要重载插件。返回空数组表示「不放行任何工具」。
  */
 export type AllowedToolsOf = () => readonly string[];
 /**
- * 唯一放行的继承工具，且只能发给自己的父会话。复用宿主的 `send_message`
- * 而不是新注册工具，才能保持旁问请求的工具列表与主会话逐字节一致
- * （`tests/cache-prefix.test.ts` 的 prompt cache 复用护栏）。
+ * 旁问永远不能调用的工具，即使写进白名单也一样。发给父会话的消息会以 user 角色进入
+ * 主会话并启动新一轮，模型可以被上下文中的注入文本诱导发送，因此不留这条通道。
  */
-export declare const REPLY_TOOL = "send_message";
-/** 本次旁问所属父会话的 id；没有父会话时不存在回传通道。 */
-export declare function parentSessionOf(agent: AgentIdentity | undefined): string | undefined;
+export declare const MESSAGE_TOOL = "send_message";
 /** 官方替换同步事件扫描：ctx.sessionProjections.snapshot(session, ['subagent']).values.subagent */
 export declare function identityOfFromContext(ctx: {
     get(name: string): unknown;
